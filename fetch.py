@@ -1,7 +1,9 @@
-import requests, shutil, re, sys
-from multiprocessing import Pool, TimeoutError
+import requests, shutil, re, sys, pytesseract
+import time as Time
+from multiprocessing.dummy import Pool, TimeoutError
+from PIL import Image
 
-validSessions = {'7fc493b6e7f56b73043793455a814a3b': 'TR31S'}
+validSessions = {}
 
 GENERIC_HEADERS = {
         'Pragma': 'no-cache',
@@ -43,15 +45,18 @@ def getCaptcha(sessionID):
     URL = 'http://schoolcoderesults.nic.in/cbserslt16/randomImage.php'
     headers = copyDic(CAPTCHA_HEADERS)
     headers['Cookie'] = 'PHPSESSID=' + sessionID
-    print headers['Cookie']
+    #print headers['Cookie']
     r = requests.get(URL, headers=headers, stream=True)
-    with open('captcha/' + sessionID + '.png', 'wb') as out:
+    with open('captcha/' + sessionID + '.jpeg', 'wb') as out:
         shutil.copyfileobj(r.raw, out)
     del r
 
 def decodeCaptcha(sessionID):
-    print sessionID
-    return 'ABCDEF'
+    #print sessionID
+    fileName = "captcha/" + sessionID + ".jpeg"
+    imageObject = Image.open(fileName)
+
+    return pytesseract.image_to_string(imageObject).upper()
 
 # data.sessionID and data.captcha
 def makeRequest(data):
@@ -63,15 +68,23 @@ def makeRequest(data):
             'selClass': '12',
             'txtAffl': data['txtAffl'],
             'txtCode': data['txtCode'],
-            'txtEmail': '1recruiter.anastasia@gmail.com',
+            'txtEmail': 'recruiter.anastasia@gmail.com',
             'txtNumber': data['captcha']
             }
 
     r = requests.post('http://schoolcoderesults.nic.in/cbserslt16/cbse_mail.php', headers=headers, data=payload)
-    if len(re.findall('All the best!!!', r.text)) > 0:
-        return (True, '')
+    if len(re.findall('All the best!!!', r.text)) > 0 :
+        return (True, "Success", data['txtAffl'])
+    elif len(re.findall('Affiliation Code is not valid', r.text)) > 0:
+        return (True, "Invalid Affiliation", data['txtAffl'])
+    elif len(re.findall('No result could be found for', r.text)) > 0 :
+        return (True, "Result Not Found", data['txtAffl'])
+    elif len(re.findall('You have provided the Affiliation Code : ', r.text )) > 0:
+        return (True, "Incorrect Code", data['txtAffl'])
     else:
-        return (False, r.text)
+        if(len(re.findall('Image text entered', r.text)) == 0):
+            print r.text
+        return (False, r.text, data['txtAffl'])
 
 def getSession():
     sessions = validSessions.keys()
@@ -90,7 +103,7 @@ def invalidateSession(sessionID):
         del validSessions[sessionID]
         return True
     else:
-        return false
+        return False
 
 def poolWorker(data):
     data = data.strip().split(',')
@@ -104,24 +117,29 @@ def poolWorker(data):
     reqArgs['sessionID'] = session[0]
     reqArgs['captcha'] = session[1]
 
-    res = makeRequest(reqArgs)
-    if res[0]:
-        return res
-    else:
-        invalidateSession(session[0])
-        session = getSession()
-        reqArgs['sessionID'] = session[0]
-        reqArgs['captcha'] = session[1]
-        res = makeRequest(reqArgs)
-        return res
+    
+    while True:
+        try:
+            print "Session array: ", len(validSessions.keys())
+            res = makeRequest(reqArgs)
+            if res[0]:
+                return res
+            else:
+                invalidateSession(session[0])
+                session = getSession()
+                reqArgs['sessionID'] = session[0]
+                reqArgs['captcha'] = session[1]
+        except Exception as e:
+            print e
+            Time.sleep(5)
 
 def runPool(fname):
-    pool = Pool(1)
+    pool = Pool(16)
     data = open(fname)
-    for i in pool.imap_unordered(poolWorker, data):
-        print i
-    # for i in data:
-        # print poolWorker(i)
+    for i in pool.imap(poolWorker, data):
+       print i
+    #for i in data:
+    #    print poolWorker(i)
     return
 
 if __name__ == '__main__':
