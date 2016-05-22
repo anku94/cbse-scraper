@@ -1,0 +1,12 @@
+node_modules
+captcha
+dist
+.idea
+*.iml
+.DS_Store
+.tmp
+bower_components
+.DS_Store
+.idea
+*.iml
+*.swp
