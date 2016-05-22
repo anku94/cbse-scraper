@@ -55,8 +55,10 @@ def decodeCaptcha(sessionID):
     #print sessionID
     fileName = "captcha/" + sessionID + ".jpeg"
     imageObject = Image.open(fileName)
-
-    return pytesseract.image_to_string(imageObject).upper()
+    try:
+        return pytesseract.image_to_string(imageObject).upper()
+    except
+        return "12345"
 
 # data.sessionID and data.captcha
 def makeRequest(data):
@@ -134,7 +136,7 @@ def poolWorker(data):
             Time.sleep(5)
 
 def runPool(fname):
-    pool = Pool(16)
+    pool = Pool(8)
     data = open(fname)
     for i in pool.imap(poolWorker, data):
        print i
