@@ -1,3 +1,4 @@
+*.properties
 node_modules
 captcha
 dist
